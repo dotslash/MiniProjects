@@ -1,3 +1,4 @@
+#for cpython use wordRuggelnumpy.py
 import datetime
 import numpypy as npy
 print "ni"
