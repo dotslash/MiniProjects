@@ -1,6 +1,6 @@
-WOrd Ruggle
+Word Ruggle
 =============
-Makes Word Ruggle easy :P (https://play.google.com/store/apps/details?id=com.ercu.wordfind).
+Makes  [Word Ruggle](https://play.google.com/store/apps/details?id=com.ercu.wordfind) easy :P
 * Wordlist : "all" (sowpods.txt used for testing)
 * wordRuggel.cpp : c++ code : runs in 1-2 secs
 * wordRuggel.py	 : does not run : unbearably slow 
