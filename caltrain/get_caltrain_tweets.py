@@ -8,7 +8,10 @@ import pytz
 import datetime
 
 local_tz = pytz.timezone('America/Los_Angeles')
+UNDERLINE = '\033[4m'
 
+def under_line(inp):
+  return UNDERLINE + inp + Style.RESET_ALL
 
 def bright_green(inp):
   return Style.BRIGHT + Fore.GREEN + inp + Fore.RESET + Style.RESET_ALL
@@ -32,7 +35,9 @@ def transform(inp):
                 text,
                 flags=re.IGNORECASE)
   inp.new_text = text
-  return (text != inp.text, text + ' -- ' + extract_time(inp))
+  inp.link = 'https://twitter.com/statuses/' + inp.id_str
+  ret = '{}\n{} -- {}'.format(text, under_line(inp.link), extract_time(inp))
+  return (text != inp.text, ret)
 
 
 def extract_time(status):
@@ -45,9 +50,9 @@ def extract_time(status):
   if mins < 60:
     formatted = '{} mins ago'.format(mins)
   elif mins < 180:
-    formatted = '{} hr {} mins ago'.format(mins / 60, mins % 60)
+    formatted = '{} hr {} mins ago'.format(int(mins / 60), mins % 60)
   else:
-    formatted = '{} hr ago'.format(mins/60)
+    formatted = '{} hrs ago'.format(int(mins / 60))
 
   out_time = ret.strftime('%b %d %H:%M')
   return '{} ({})'.format(bright_cyan(formatted), out_time)
@@ -63,7 +68,9 @@ def main(args, all=False, account='Caltrain'):
   tweets = [transform(status) for status in api.user_timeline(id=account)]
   p1 = [status for change, status in tweets if change]
   p2 = [status for change, status in tweets if not change]
-  print('\n--------------------------------\n'.join(p1))
+  sep = '\n--------------------------------\n'
+  sep = '\n\n'
+  print(sep.join(p1))
   if all:
     print('===========================================================')
     print('\n--------------------------------\n'.join(p2))
