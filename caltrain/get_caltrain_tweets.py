@@ -30,7 +30,7 @@ def transform(inp):
                 bright_green(r'\1'),
                 inp.text,
                 flags=re.IGNORECASE)
-  text = re.sub('(\d+\s+?mins?(\s*late)?)',
+  text = re.sub('(\d+\s*?mins?(\s*late)?)',
                 bright_red(r'\1'),
                 text,
                 flags=re.IGNORECASE)
