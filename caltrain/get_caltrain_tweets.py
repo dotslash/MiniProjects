@@ -1,3 +1,4 @@
+#! /usr/local/bin/python3
 import tweepy
 import json
 import sys
@@ -6,12 +7,31 @@ import re
 import argparse
 import pytz
 import datetime
+import html
+'''
+# Supporting Bash function
+caltrain ()
+{
+    python3 /~/code/MiniProjects/caltrain/get_caltrain_tweets.py \
+          -ck consumer_key \
+          -cs consumer_secret \
+          -at access_token \
+          -ats access_token_secret \
+          "$@"
+}
+'''
 
 local_tz = pytz.timezone('America/Los_Angeles')
 UNDERLINE = '\033[4m'
 
+
+def html_unescape(s):
+  return html.unescape(s)
+
+
 def under_line(inp):
   return UNDERLINE + inp + Style.RESET_ALL
+
 
 def bright_green(inp):
   return Style.BRIGHT + Fore.GREEN + inp + Fore.RESET + Style.RESET_ALL
@@ -26,11 +46,12 @@ def bright_red(inp):
 
 
 def transform(inp):
+  inp.text = html_unescape(inp.text)
   text = re.sub(r'(?<!\w)(([NS]B)?\s*\d{3})(?!\w)',
                 bright_green(r'\1'),
                 inp.text,
                 flags=re.IGNORECASE)
-  text = re.sub('(\d+\s*?mins?(\s*late)?)',
+  text = re.sub('(\d+\s+?mins?(\s*late)?)',
                 bright_red(r'\1'),
                 text,
                 flags=re.IGNORECASE)
@@ -76,8 +97,7 @@ def main(args, all=False, account='Caltrain'):
     print('\n--------------------------------\n'.join(p2))
 
 
-'''
-texts = [
+'''texts = [
  "#NB277 is 11 mins late out of San Bruno. #Caltrain\n",
  "254-269-386 will run with a 5 car Gallery Set instead of a 6 car Bombardier.
  #Caltrain\n",
@@ -88,33 +108,22 @@ for text in texts: print transform(text)
 '''
 parser = argparse.ArgumentParser(description='Caltrain tweets')
 
-parser.add_argument('-ck',
-                    help='Consumer Key',
-                    dest='consumer_key',
-                    required=True)
-parser.add_argument('-cs',
-                    help='Consumer Secret',
-                    dest="consumer_secret",
-                    required=True)
-parser.add_argument('-at',
-                    help="Access token",
-                    dest="access_token",
-                    required=True)
-parser.add_argument('-ats',
-                    help="Access token Secret",
-                    dest="access_token_secret",
-                    required=True)
+parser.add_argument(
+    '-ck', help='Consumer Key', dest='consumer_key', required=True)
+parser.add_argument(
+    '-cs', help='Consumer Secret', dest='consumer_secret', required=True)
+parser.add_argument(
+    '-at', help='Access token', dest='access_token', required=True)
+parser.add_argument(
+    '-ats',
+    help='Access token Secret',
+    dest='access_token_secret',
+    required=True)
 
-parser.add_argument('-u',
-                    help="User Account",
-                    dest="account",
-                    type=str,
-                    default='Caltrain')
-parser.add_argument('-a',
-                    help="All tweets",
-                    dest="all",
-                    type=bool,
-                    default=False)
+parser.add_argument(
+    '-u', help='User Account', dest='account', type=str, default='Caltrain')
+parser.add_argument(
+    '-a', help='All tweets', dest='all', type=bool, default=False)
 
 args = parser.parse_args()
 main(args, all=args.all, account=args.account)
