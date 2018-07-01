@@ -1,0 +1,1 @@
+0 22 * * * /Users/stps/.envs/stps/bin/python /Users/stps/code/MiniProjects/AirTableStocks/airtable_stocks.py
