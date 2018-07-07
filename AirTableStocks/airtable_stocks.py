@@ -106,10 +106,10 @@ def GetStockInfo(ticker):
         for market_date in reverse_sorted_dates:
             if market_date <= date:
                 return close_prices[market_date]
-        return math.nan
+        return float('nan')
 
     last_updated = max(close_prices.keys())
-    latest_price = close_prices.get(last_updated, math.nan)
+    latest_price = close_prices.get(last_updated, float('nan'))
     return StockInfo(ticker=ticker, price=latest_price, last_updated=last_updated,
                      week_ago=nearest_close_price(7),
                      mo_ago=nearest_close_price(31),
