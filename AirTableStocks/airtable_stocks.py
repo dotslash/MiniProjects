@@ -168,7 +168,7 @@ def UpdateStocksTable(portfolio):
         url = 'https://api.airtable.com/v0/{}/{}'.format(AIRTABLE_BASE_ID, STOCKS_TABLE_NAME)
 
         def historical_price(old_price, current_price):
-            up_down = 'up' if (current_price > old_price) else 'down'
+            up_down = '⬆️' if (current_price > old_price) else '🔻'
             return '${} {:.1f}% {}'.format(old_price, abs(current_price - old_price) * 100.0 / old_price, up_down)
 
         stock_info = pf_item.stock_info
