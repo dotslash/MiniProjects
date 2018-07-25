@@ -219,7 +219,7 @@ def ReadStocksFromCSVOrReturnEmpty(fn):
         import csv
         with open(fn, 'r') as csvfile:
             csv_reader = csv.DictReader(csvfile, delimiter=',')
-            return {s['ticker']: StockInfo(*s) for s in csv_reader}
+            return {s['ticker']: StockInfo(**s) for s in csv_reader}
     except Exception:
         return dict()
 
