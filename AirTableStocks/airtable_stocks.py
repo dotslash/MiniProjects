@@ -16,11 +16,11 @@ import requests
 @attr.s
 class StockInfo(object):
     ticker = attr.ib(type=str)
-    price = attr.ib(type=float)
-    week_ago = attr.ib(type=float)
-    mo_ago = attr.ib(type=float)
-    quarter_ago = attr.ib(type=float)
-    yr_ago = attr.ib(type=float)
+    price = attr.ib(converter=float)
+    week_ago = attr.ib(converter=float)
+    mo_ago = attr.ib(converter=float)
+    quarter_ago = attr.ib(converter=float)
+    yr_ago = attr.ib(converter=float)
     last_updated = attr.ib(type=str)
 
 
@@ -41,7 +41,7 @@ AIRTABLE_KEY = config['Airtable']['Key']
 AIRTABLE_BASE_ID = config['Airtable']['BaseId']
 STOCKS_TABLE_NAME = 'Stocks'
 PORTFOLIO_TABLE_NAME = 'Portfolio'
-MAX_RPM = 500
+MAX_RPM = 5
 
 
 def DateNDaysAgo(n: int) -> str:
