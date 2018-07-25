@@ -29,12 +29,13 @@ class PortfolioItem(object):
 
 
 config = json.load(open(os.path.expanduser('~/.airtable_keys.json')))
+STOCK_INFO_CSV = os.path.expanduser('~/.airtable_stocks.json')
 ALPHA_ADVANTAGE_KEY = config['AlphaAdvantage']
 AIRTABLE_KEY = config['Airtable']['Key']
 AIRTABLE_BASE_ID = config['Airtable']['BaseId']
 STOCKS_TABLE_NAME = 'Stocks'
 PORTFOLIO_TABLE_NAME = 'Portfolio'
-MAX_RPS = 5
+MAX_RPM = 5
 
 
 def DateNDaysAgo(n):
@@ -47,8 +48,8 @@ last_aa_request_time = arrow.get(1970, 1, 1)
 # Alpha advantage has a MAX_RPS. This must be called before making API call.
 def GetAlphaAdvantageApproval():
     global last_aa_request_time
-    global MAX_RPS
-    next_allowed_time = last_aa_request_time.shift(seconds=int(1 + (60.0 / MAX_RPS)))
+    global MAX_RPM
+    next_allowed_time = last_aa_request_time.shift(seconds=int(1 + (60.0 / MAX_RPM)))
     if next_allowed_time < arrow.utcnow():
         print('{} No Wait'.format(arrow.utcnow()))
         last_aa_request_time = arrow.utcnow()
@@ -86,7 +87,7 @@ def CleanupAlphaAdvantageResponse(response):
         return response
 
 
-def GetStockInfo(ticker):
+def GetStockInfo(ticker, existing_stock_info):
     ticker = ticker.upper()
     GetAlphaAdvantageApproval()
     response = requests.get(url='https://www.alphavantage.co/query',
@@ -96,7 +97,8 @@ def GetStockInfo(ticker):
     close_prices = CleanupAlphaAdvantageResponse(response)
     if not close_prices or not isinstance(close_prices, dict):
         print('{} Fail {}'.format(arrow.utcnow(), ticker))
-        return None
+        # This request failed. If we have old data, return it.
+        return existing_stock_info.get(ticker, None)
     print('{} Success {}'.format(arrow.utcnow(), ticker))
     reverse_sorted_dates = sorted(close_prices.keys(), reverse=True)
 
@@ -168,6 +170,7 @@ def UpdateStocksTable(portfolio):
         url = 'https://api.airtable.com/v0/{}/{}'.format(AIRTABLE_BASE_ID, STOCKS_TABLE_NAME)
 
         def historical_price(old_price, current_price):
+            old_price, current_price = float(old_price), float(current_price)
             up_down = '⬆️' if (current_price > old_price) else '🔻'
             return '${} {:.1f}% {}'.format(old_price, abs(current_price - old_price) * 100.0 / old_price, up_down)
 
@@ -189,24 +192,50 @@ def UpdateStocksTable(portfolio):
                       json=record)
 
 
+def WriteStocksToCSV(fn, ticker_to_stocks):
+    import csv
+    with open(fn, 'w') as csvfile:
+        csv_writer = csv.DictWriter(csvfile, fieldnames=[field.name for field in attr.fields(StockInfo)], delimiter=',')
+        csv_writer.writeheader()
+        for _, stock in ticker_to_stocks.items():
+            csv_writer.writerow(attr.asdict(stock))
+
+
+def ReadStocksFromCSVOrReturnEmpty(fn):
+    try:
+        import csv
+        with open(fn, 'r') as csvfile:
+            csv_reader = csv.DictReader(csvfile, delimiter=',')
+            return {s['ticker']: StockInfo(*s) for s in csv_reader}
+    except Exception:
+        return dict()
+
+
 def UpdateAirtable():
     def EnhancePortfolioItem(portfolio_item, stock_info):
         # Adds stock info to the portfolio item.
         portfolio_item.stock_info = stock_info
         return portfolio_item
 
+    # Read: Existing stock info from disk.
+    existing_stock_info = ReadStocksFromCSVOrReturnEmpty(STOCK_INFO_CSV)
     # Read: Stocks, Count, Airtable row ids
     portfolio_without_price = ReadPortfolioTable()
     if portfolio_without_price is None:
         # Failure.
         return
 
-    # Compute: StockInfo for all the stocks and enhnace the portfolio info.
-    portfolio_with_price = {ticker: EnhancePortfolioItem(folio_item, GetStockInfo(ticker)) for ticker, folio_item in
+    # Compute: StockInfo for all the stocks and enhance the portfolio info.
+    portfolio_with_price = {ticker: EnhancePortfolioItem(folio_item, GetStockInfo(ticker, existing_stock_info)) for
+                            ticker, folio_item in
                             portfolio_without_price.items()}
     # Update tables
     UpdatePortfolioTable(portfolio_with_price)
     UpdateStocksTable(portfolio_with_price)
+    # Update Stock Info CSV
+    WriteStocksToCSV(STOCK_INFO_CSV,
+                     {ticker: portfolio_item.stock_info for ticker, portfolio_item in portfolio_with_price.items() if
+                      portfolio_item.stock_info is not None})
 
 
 if __name__ == '__main__':
