@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 
-import os.path
 import json
+import os.path
+
+import arrow
 import attr
 import requests
-import math
-import arrow
 
 
 @attr.s
@@ -73,12 +73,15 @@ def CleanupAlphaAdvantageResponse(response):
         return key
 
     numeric_keys = {'adjusted_close'}
-    ignore_keys = {'open', 'high', 'low', 'close', 'volume', 'dividend_amount', 'split_coefficient', 'meta_data'}
+    ignore_keys = {'open', 'high', 'low', 'close', 'volume', 'dividend_amount', 'split_coefficient',
+                   'meta_data'}
     if type(response) == list:
         return [CleanupAlphaAdvantageResponse(item) for item in response]
     elif isinstance(response, dict):
-        transformed = {transform_key(key): CleanupAlphaAdvantageResponse(value) for key, value in response.items()}
-        transformed = {k: float(v) if k in numeric_keys else v for k, v in transformed.items() if k not in ignore_keys}
+        transformed = {transform_key(key): CleanupAlphaAdvantageResponse(value) for key, value in
+                       response.items()}
+        transformed = {k: float(v) if k in numeric_keys else v for k, v in transformed.items() if
+                       k not in ignore_keys}
         if len(transformed) == 1:
             return list(transformed.values())[0]
         else:
@@ -120,32 +123,37 @@ def GetStockInfo(ticker, existing_stock_info):
 
 
 def ReadPortfolioTable():
-    response = requests.get(url='https://api.airtable.com/v0/{}/{}'.format(AIRTABLE_BASE_ID, PORTFOLIO_TABLE_NAME),
-                            params={'api_key': 'key5s6LLGY7y5wbDp'}).json()
+    response = requests.get(
+        url='https://api.airtable.com/v0/{}/{}'.format(AIRTABLE_BASE_ID, PORTFOLIO_TABLE_NAME),
+        params={'api_key': 'key5s6LLGY7y5wbDp'}).json()
     if 'records' not in response:
         return None
     ret = dict()
     for record in response['records']:
         # Same stock can be present in multiple rows.
-        ticker, count, row_id = record['fields']['Ticker'], record['fields']['Quantity'], record['id']
+        ticker, count, row_id = record['fields']['Ticker'], record['fields']['Quantity'], record[
+            'id']
         if ticker in ret:
             existing = ret[ticker]
             existing.count += count
             existing.row_ids.append(row_id)
         else:
-            ret[ticker] = PortfolioItem(ticker=ticker, row_ids=[row_id], count=count, stock_info=None)
+            ret[ticker] = PortfolioItem(ticker=ticker, row_ids=[row_id], count=count,
+                                        stock_info=None)
     return ret
 
 
 def ClearStocksTable():
     # Removes all info from stocks table.
-    response = requests.get(url='https://api.airtable.com/v0/{}/{}'.format(AIRTABLE_BASE_ID, STOCKS_TABLE_NAME),
-                            params={'api_key': 'key5s6LLGY7y5wbDp'}).json()
+    response = requests.get(
+        url='https://api.airtable.com/v0/{}/{}'.format(AIRTABLE_BASE_ID, STOCKS_TABLE_NAME),
+        params={'api_key': 'key5s6LLGY7y5wbDp'}).json()
     if 'records' not in response:
         return None
     for record in response['records']:
         requests.delete(
-            url='https://api.airtable.com/v0/{}/{}/{}'.format(AIRTABLE_BASE_ID, STOCKS_TABLE_NAME, record['id']),
+            url='https://api.airtable.com/v0/{}/{}/{}'.format(AIRTABLE_BASE_ID, STOCKS_TABLE_NAME,
+                                                              record['id']),
             headers={'Authorization': 'Bearer {}'.format(AIRTABLE_KEY)})
 
 
@@ -155,7 +163,8 @@ def UpdatePortfolioTable(portfolio):
             continue
         # Update portfolio table with the latest stock price.
         for row_id in pf_item.row_ids:
-            url = 'https://api.airtable.com/v0/{}/{}/{}'.format(AIRTABLE_BASE_ID, PORTFOLIO_TABLE_NAME, row_id)
+            url = 'https://api.airtable.com/v0/{}/{}/{}'.format(AIRTABLE_BASE_ID,
+                                                                PORTFOLIO_TABLE_NAME, row_id)
             requests.patch(url=url, headers={'Authorization': 'Bearer {}'.format(AIRTABLE_KEY)},
                            json={'fields': {'Current Price': pf_item.stock_info.price}})
 
@@ -172,7 +181,9 @@ def UpdateStocksTable(portfolio):
         def historical_price(old_price, current_price):
             old_price, current_price = float(old_price), float(current_price)
             up_down = '⬆️' if (current_price > old_price) else '🔻'
-            return '${} {:.1f}% {}'.format(old_price, abs(current_price - old_price) * 100.0 / old_price, up_down)
+            return '${} {:.1f}% {}'.format(old_price,
+                                           abs(current_price - old_price) * 100.0 / old_price,
+                                           up_down)
 
         stock_info = pf_item.stock_info
         record = {
@@ -195,7 +206,9 @@ def UpdateStocksTable(portfolio):
 def WriteStocksToCSV(fn, ticker_to_stocks):
     import csv
     with open(fn, 'w') as csvfile:
-        csv_writer = csv.DictWriter(csvfile, fieldnames=[field.name for field in attr.fields(StockInfo)], delimiter=',')
+        csv_writer = csv.DictWriter(csvfile,
+                                    fieldnames=[field.name for field in attr.fields(StockInfo)],
+                                    delimiter=',')
         csv_writer.writeheader()
         for _, stock in ticker_to_stocks.items():
             csv_writer.writerow(attr.asdict(stock))
@@ -226,15 +239,18 @@ def UpdateAirtable():
         return
 
     # Compute: StockInfo for all the stocks and enhance the portfolio info.
-    portfolio_with_price = {ticker: EnhancePortfolioItem(folio_item, GetStockInfo(ticker, existing_stock_info)) for
-                            ticker, folio_item in
-                            portfolio_without_price.items()}
+    portfolio_with_price = {
+        ticker: EnhancePortfolioItem(folio_item, GetStockInfo(ticker, existing_stock_info)) for
+        ticker, folio_item in
+        portfolio_without_price.items()
+    }
     # Update tables
     UpdatePortfolioTable(portfolio_with_price)
     UpdateStocksTable(portfolio_with_price)
     # Update Stock Info CSV
     WriteStocksToCSV(STOCK_INFO_CSV,
-                     {ticker: portfolio_item.stock_info for ticker, portfolio_item in portfolio_with_price.items() if
+                     {ticker: portfolio_item.stock_info for ticker, portfolio_item in
+                      portfolio_with_price.items() if
                       portfolio_item.stock_info is not None})
 
 
