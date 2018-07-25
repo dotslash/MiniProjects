@@ -2,6 +2,11 @@
 
 import json
 import os.path
+from typing import List
+from typing import Tuple
+from typing import TypeVar
+from typing import Dict
+import random
 
 import arrow
 import attr
@@ -28,6 +33,7 @@ class PortfolioItem(object):
     stock_info = attr.ib(type=StockInfo)
 
 
+T = TypeVar('T')  # Generic Type
 config = json.load(open(os.path.expanduser('~/.airtable_keys.json')))
 STOCK_INFO_CSV = os.path.expanduser('~/.airtable_stocks.json')
 ALPHA_ADVANTAGE_KEY = config['AlphaAdvantage']
@@ -35,16 +41,20 @@ AIRTABLE_KEY = config['Airtable']['Key']
 AIRTABLE_BASE_ID = config['Airtable']['BaseId']
 STOCKS_TABLE_NAME = 'Stocks'
 PORTFOLIO_TABLE_NAME = 'Portfolio'
-MAX_RPM = 5
+MAX_RPM = 500
 
 
-def DateNDaysAgo(n):
+def DateNDaysAgo(n: int) -> str:
     return arrow.utcnow().shift(days=-n).format('YYYY-MM-DD')
 
 
+def DictToShuffledList(dct: Dict[str, T]) -> List[Tuple[str, T]]:
+    ret = list(dct.items())
+    random.shuffle(ret)
+    return ret
+
+
 last_aa_request_time = arrow.get(1970, 1, 1)
-
-
 # Alpha advantage has a MAX_RPS. This must be called before making API call.
 def GetAlphaAdvantageApproval():
     global last_aa_request_time
@@ -105,7 +115,8 @@ def GetStockInfo(ticker, existing_stock_info):
     print('{} Success {}'.format(arrow.utcnow(), ticker))
     reverse_sorted_dates = sorted(close_prices.keys(), reverse=True)
 
-    # 1w before a sunday is a sunday. There will be no stock info. So we need to find the nearest day before that day.
+    # 1w before a sunday is a sunday. There will be no stock info.
+    # So we need to find the nearest day before that day.
     def nearest_close_price(days_ago):
         date = DateNDaysAgo(days_ago)
         for market_date in reverse_sorted_dates:
@@ -242,8 +253,9 @@ def UpdateAirtable():
     portfolio_with_price = {
         ticker: EnhancePortfolioItem(folio_item, GetStockInfo(ticker, existing_stock_info)) for
         ticker, folio_item in
-        portfolio_without_price.items()
-    }
+        # Shuffle the list to make sure the same stocks dont get rate limited again and again.
+        DictToShuffledList(portfolio_without_price)
+        }
     # Update tables
     UpdatePortfolioTable(portfolio_with_price)
     UpdateStocksTable(portfolio_with_price)
