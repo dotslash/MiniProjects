@@ -1,5 +1,7 @@
 import pathlib
 from collections import defaultdict, Counter
+from datetime import date
+from dateutil import parser
 from typing import List, Dict, Set
 
 import colored
@@ -16,6 +18,23 @@ COLOR_TO_EMOJI = {
 }
 ALL_LETTERS = [chr(i + ord("a")) for i in range(26)]
 LENGTH = 5
+
+
+def get_words():
+    import requests
+    r = requests.get('https://www.nytimes.com/games/wordle/main.4d41d2be.js')
+    words = [x for x in str(r.content).split(";") if 'robin' in x][0]
+    return words.split("[")[1].split("]")[0].strip('"').split('","')
+
+
+def get_wod(words, which_day=None):
+    if not which_day:
+        which_day = date.today()
+    if type(which_day) == str:
+        which_day = parser.parse(which_day).date()
+    start_day = date(2021, 6, 19)
+    word_ind = (len(words) + (which_day - start_day).days) % len(words)
+    return words[word_ind]
 
 
 class Output:
@@ -299,6 +318,22 @@ class Solver:
             return None
         return all_word_scores[0][0]
 
+    def solve_next_word_for_cheat(self, guesses_so_far: List[str]):
+        for g in guesses_so_far:
+            spec = self.checker.match_with_wordspec(g)
+            self._update_char_info(spec)
+            a, b = spec.debug_str(self.output)
+            self.output.print(
+                lambda: f"{a} {self._options_str()}"
+            )
+            if spec.is_solved:
+                return
+        guess = self._next()
+        if not guess:
+            self.output.print(f"Failed to wordle the word")
+            return
+        self.output.print(guess)
+
     def solve(self):
         shareable_res = ""
         for i in range(20):
@@ -324,10 +359,14 @@ class Solver:
 
 
 class WordCache:
-    def __init__(self, word_list_path: pathlib.Path):
+    def __init__(self, word_list_path: pathlib.Path = None):
         # wordle word list (all of the size LENGTH)
+        if word_list_path is not None:
+            self.all_words_list = word_list_path.read_text().splitlines()
+        else:
+            self.all_words_list = get_words()
         self.all_words: Set[str] = set(
-            w.strip() for w in word_list_path.read_text().splitlines()
+            w.strip() for w in self.all_words_list
         )
 
 
@@ -336,24 +375,43 @@ def default_word_list_path():
     return pathlib.Path(f"{pwd}/wordle.txt")
 
 
-cache = WordCache(default_word_list_path())
+cache = {}
+
+
+def ensure_cache():
+    if 'word_cache' not in cache:
+        cache['word_cache'] = WordCache()
 
 
 # https://cloud.google.com/functions/docs/first-python is a shame. I have to use flask 1.0
 def solve_for_http_request(request):
-    def get_word():
-        word = request.path.strip("/").split("/")[-1]
-        if word:
-            return word
-        else:
-            return request.args.get("word")
+    ensure_cache()
+    word_cache = cache['word_cache']
+
+    def parse_request():
+        word = request.args.get("word")
+        if not word and word != '_cheat':
+            word = request.path.strip("/").split("/")[-1]
+        if word == '_cheat':
+            guess_date = request.args.get("date")
+            word = get_wod(word_cache.all_words_list, which_day=guess_date)
+        guesses = [w.strip()
+                   for w in request.args.get("guesses", default="").split(",")
+                   if w.strip()]
+        return {
+            'word': word,
+            'guesses': guesses,
+            'is_cheat': 'guesses' in request.args
+        }
 
     def plain_text_response_400(mesage):
         resp = flask.make_response(mesage, 400)
         resp.content_type = 'text/plain'
         return resp
 
-    word = get_word()
+    parsed_rqst = parse_request()
+    word, guesses, is_cheat = parsed_rqst['word'], parsed_rqst['guesses'], parsed_rqst['is_cheat']
+
     usage_string = (
         "\n"
         "usage: https://us-central1-booming-client-211100.cloudfunctions.net/wordle/<5_letter_word>"
@@ -363,12 +421,15 @@ def solve_for_http_request(request):
     elif len(word) != LENGTH:
         return plain_text_response_400(
             f"bad request: word should have length {LENGTH}{usage_string}")
-    elif word not in cache.all_words:
+    elif word not in word_cache.all_words:
         return plain_text_response_400(f"bad request: word seems to invalid{usage_string}")
     checker = Checker(word)
     ho = HtmlOutput(debug=request.args.get("debug") == "true")
-    s = Solver(ro_word_cache=cache, checker=checker, output=ho)
-    s.solve()
+    s = Solver(ro_word_cache=word_cache, checker=checker, output=ho)
+    if guesses or is_cheat:
+        s.solve_next_word_for_cheat(guesses)
+    else:
+        s.solve()
     return ho.get_html()
 
 
@@ -383,11 +444,11 @@ def rate_algo():
         print(f"weighted_avg {weighted_avg}")
         print(sorted(distribution.items()))
 
-    for i, w in enumerate(cache.all_words):
+    for i, w in enumerate(cache['word_dict'].all_words):
         if i % 100 == 1:
             print(f"==={i}===")
             print_distribution()
-        s = Solver(ro_word_cache=cache, checker=Checker(w), output=Output())
+        s = Solver(ro_word_cache=cache['word_dict'], checker=Checker(w), output=Output())
         distribution[s.solve()] += 1
     print_distribution()
 
@@ -397,7 +458,7 @@ if __name__ == "__main__":
 
     dictionary_default_val = f'{pathlib.Path(__file__).parent}/wordle.txt'
     p = argparse.ArgumentParser("wordle_solver")
-    p.add_argument("--mode", choices=["normal", "cheat", "rate_algo", "local_server"],
+    p.add_argument("--mode", choices=["normal", "rate_algo", "local_server"],
                    default="normal",
                    help="(default: %(default)s)")
     p.add_argument("--dictionary", default=str(default_word_list_path()),
@@ -413,8 +474,6 @@ if __name__ == "__main__":
                    output=StdOutput()
                    )
         s.solve()
-    elif args.mode == 'cheat':
-        print("TODO: support cheat")
     elif args.mode == 'local_server':
         app = flask.Flask(__name__)
 
